@@ -25,7 +25,7 @@
     <#return text?uncap_first>
 </#function>
 <#-- 驼峰转下划线 -->
-<#function camelToDashed(str, case='normal')>
+<#function camelToDashed(str, case='lower')>
   <#return camelToChar(str, "_", case)>
 </#function>
 <#---->
@@ -115,9 +115,9 @@
       <#return "{type:'${po.classType}',value:'${po.fieldName}',text:'${po.filedComment}'}">
   <#else>
       <#if po.classType=="sel_search" || po.classType=="list_multi">
-          <#return "{type:'${po.classType}',value:'${po.fieldName}',text:'${po.filedComment}',dictTable:'${superQuery_dictTable}', dictText:'${superQuery_dictText}', dictCode:'${po.dictField}'}">
+          <#return "{type:'${po.classType}',value:'${po.fieldName}',text:'${po.filedComment}',dictTable:\"${superQuery_dictTable}\", dictText:'${superQuery_dictText}', dictCode:'${po.dictField}'}">
       <#elseif po.dictTable?? && po.dictTable!="" && po.classType!="sel_tree" && po.classType!="cat_tree" && po.classType!="link_down">
-          <#return "{type:'${po.fieldDbType}',value:'${po.fieldName}',text:'${po.filedComment}',dictCode:'${po.dictTable},${po.dictText},${po.dictField}'}">
+          <#return "{type:'${po.fieldDbType}',value:'${po.fieldName}',text:'${po.filedComment}',dictCode:\"${po.dictTable},${po.dictText},${po.dictField}\"}">
       <#elseif po.dictField?? && po.classType!="sel_tree" && po.classType!="cat_tree" && po.classType!="link_down">
           <#return "{type:'${po.fieldDbType}',value:'${po.fieldName}',text:'${po.filedComment}',dictCode:'${po.dictField}'}">
       <#elseif po.fieldDbType=="Text">
@@ -130,4 +130,44 @@
           <#return "{type:'${po.fieldDbType}',value:'${po.fieldName}',text:'${po.filedComment}'}">
       </#if>
   </#if>
+</#function>
+
+
+<#-- vue3 获取表单modal的宽度-->
+<#function getModalWidth fieldRowNum>
+    <#assign modal_width = 800>
+    <#if fieldRowNum==2>
+        <#assign modal_width = 896>
+    <#elseif fieldRowNum==3>
+        <#assign modal_width = 1024>
+    <#elseif fieldRowNum==4>
+        <#assign modal_width = 1280>
+    </#if>
+    <#return modal_width>
+</#function>
+
+<#-- vue3 获取表单 colspan -->
+<#function getFormSpan fieldRowNum>
+    <#assign form_span = 24>
+    <#if fieldRowNum==2>
+        <#assign form_span = 12>
+    <#elseif fieldRowNum==3>
+        <#assign form_span = 8>
+    <#elseif fieldRowNum==4>
+        <#assign form_span = 6>
+    </#if>
+    <#return form_span>
+</#function>
+
+<#-- vue3 native 判断字段名不是 pidField  -->
+<#function isNotPidField(tableVo, fieldDbName) >
+  <#assign flag = true>
+  <#if tableVo??>
+    <#if tableVo.extendParams??>
+      <#if tableVo.extendParams.pidField?default("")?trim == fieldDbName>
+        <#assign flag = false>
+      </#if>
+    </#if>
+  </#if>
+  <#return flag>
 </#function>

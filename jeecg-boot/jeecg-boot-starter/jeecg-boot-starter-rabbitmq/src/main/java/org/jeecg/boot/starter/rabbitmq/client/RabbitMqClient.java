@@ -28,6 +28,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 
 /**
  * 消息队列客户端
@@ -91,11 +92,16 @@ public class RabbitMqClient {
         rabbitAdmin.declareExchange(directExchange);
         if (ObjectUtil.isNotEmpty(queues)) {
             for (String queueName : queues) {
-                Queue queue = new Queue(queueName);
-                addQueue(queue);
-                Binding binding = BindingBuilder.bind(queue).to(directExchange).with(queueName);
-                rabbitAdmin.declareBinding(binding);
-                log.info("队列创建成功:" + queueName);
+                Properties result = rabbitAdmin.getQueueProperties(queueName);
+                if (ObjectUtil.isEmpty(result)) {
+                    Queue queue = new Queue(queueName);
+                    addQueue(queue);
+                    Binding binding = BindingBuilder.bind(queue).to(directExchange).with(queueName);
+                    rabbitAdmin.declareBinding(binding);
+                    log.info("创建队列:" + queueName);
+                }else{
+                    log.info("已有队列:" + queueName);
+                }
             }
         }
     }
@@ -215,16 +221,6 @@ public class RabbitMqClient {
         rabbitAdmin.declareBinding(binding);
         SimpleDateFormat sf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         log.debug("发送时间：" + sf.format(new Date()));
-        messageListenerContainer.setQueueNames(queueName);
-/*        messageListenerContainer.setMessageListener(new MqListener<Message>() {
-            @Override
-            public void onMessage(Message message, Channel channel) {
-                MqListener messageListener = SpringContextHolder.getHandler(queueName + "Listener", MqListener.class);
-                if (ObjectUtil.isNotEmpty(messageListener)) {
-                    messageListener.onMessage(message, channel);
-                }
-            }
-        });*/
         rabbitTemplate.convertAndSend(DelayExchangeBuilder.DEFAULT_DELAY_EXCHANGE, queueName, params, message -> {
             if (expiration != null && expiration > 0) {
                 message.getMessageProperties().setHeader("x-delay", expiration);

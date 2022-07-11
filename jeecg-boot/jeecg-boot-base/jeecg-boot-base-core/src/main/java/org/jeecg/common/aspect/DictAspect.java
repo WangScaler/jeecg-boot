@@ -2,8 +2,8 @@ package org.jeecg.common.aspect;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson.parser.Feature;
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -18,13 +18,14 @@ import org.jeecg.common.constant.CommonConstant;
 import org.jeecg.common.system.vo.DictModel;
 import org.jeecg.common.util.oConvertUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.lang.reflect.Field;
-import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -37,14 +38,21 @@ import java.util.stream.Collectors;
 @Component
 @Slf4j
 public class DictAspect {
-
+    @Lazy
     @Autowired
-    private CommonAPI commonAPI;
+    private CommonAPI commonApi;
     @Autowired
     public RedisTemplate redisTemplate;
 
-    // 定义切点Pointcut
-    @Pointcut("execution(public * org.jeecg.modules..*.*Controller.*(..))")
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    private static final String JAVA_UTIL_DATE = "java.util.Date";
+
+    /**
+     * 定义切点Pointcut
+     */
+    @Pointcut("execution(public * org.jeecg.modules..*.*Controller.*(..)) || @annotation(org.jeecg.common.aspect.annotation.AutoDict)")
     public void excudeService() {
     }
 
@@ -55,7 +63,7 @@ public class DictAspect {
         long time2=System.currentTimeMillis();
         log.debug("获取JSON数据 耗时："+(time2-time1)+"ms");
         long start=System.currentTimeMillis();
-        this.parseDictText(result);
+        result=this.parseDictText(result);
         long end=System.currentTimeMillis();
         log.debug("注入字典到JSON数据  耗时"+(end-start)+"ms");
         return result;
@@ -83,7 +91,7 @@ public class DictAspect {
      *             目前vue是这么进行字典渲染到table上的多了就很麻烦了 这个直接在服务端渲染完成前端可以直接用
      * @param result
      */
-    private void parseDictText(Object result) {
+    private Object parseDictText(Object result) {
         if (result instanceof Result) {
             if (((Result) result).getResult() instanceof IPage) {
                 List<JSONObject> items = new ArrayList<>();
@@ -91,18 +99,31 @@ public class DictAspect {
                 //step.1 筛选出加了 Dict 注解的字段列表
                 List<Field> dictFieldList = new ArrayList<>();
                 // 字典数据列表， key = 字典code，value=数据列表
-                Map<String, List<String>> dataListMap = new HashMap<>();
+                Map<String, List<String>> dataListMap = new HashMap<>(5);
+                //取出结果集
+                List<Object> records=((IPage) ((Result) result).getResult()).getRecords();
+                //update-begin--Author:zyf -- Date:20220606 ----for：【VUEN-1230】 判断是否含有字典注解,没有注解返回-----
+                Boolean hasDict= checkHasDict(records);
+                if(!hasDict){
+                    return result;
+                }
 
-                for (Object record : ((IPage) ((Result) result).getResult()).getRecords()) {
-                    ObjectMapper mapper = new ObjectMapper();
+                log.info(" __ 进入字典翻译切面 DictAspect —— " );
+                //update-end--Author:zyf -- Date:20220606 ----for：【VUEN-1230】 判断是否含有字典注解,没有注解返回-----
+                for (Object record : records) {
                     String json="{}";
                     try {
+                        //update-begin--Author:zyf -- Date:20220531 ----for：【issues/#3629】 DictAspect Jackson序列化报错-----
                         //解决@JsonFormat注解解析不了的问题详见SysAnnouncement类的@JsonFormat
-                         json = mapper.writeValueAsString(record);
+                         json = objectMapper.writeValueAsString(record);
+                        //update-end--Author:zyf -- Date:20220531 ----for：【issues/#3629】 DictAspect Jackson序列化报错-----
                     } catch (JsonProcessingException e) {
                         log.error("json解析失败"+e.getMessage(),e);
                     }
-                    JSONObject item = JSONObject.parseObject(json);
+                    //update-begin--Author:scott -- Date:20211223 ----for：【issues/3303】restcontroller返回json数据后key顺序错乱 -----
+                    JSONObject item = JSONObject.parseObject(json, Feature.OrderedField);
+                    //update-end--Author:scott -- Date:20211223 ----for：【issues/3303】restcontroller返回json数据后key顺序错乱 -----
+
                     //update-begin--Author:scott -- Date:20190603 ----for：解决继承实体字段无法翻译问题------
                     //for (Field field : record.getClass().getDeclaredFields()) {
                     // 遍历所有字段，把字典Code取出来，放到 map 里
@@ -129,10 +150,12 @@ public class DictAspect {
                             this.listAddAllDeduplicate(dataList, Arrays.asList(value.split(",")));
                         }
                         //date类型默认转换string格式化日期
-                        if (field.getType().getName().equals("java.util.Date")&&field.getAnnotation(JsonFormat.class)==null&&item.get(field.getName())!=null){
-                            SimpleDateFormat aDate=new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-                            item.put(field.getName(), aDate.format(new Date((Long) item.get(field.getName()))));
-                        }
+                        //update-begin--Author:zyf -- Date:20220531 ----for：【issues/#3629】 DictAspect Jackson序列化报错-----
+                        //if (JAVA_UTIL_DATE.equals(field.getType().getName())&&field.getAnnotation(JsonFormat.class)==null&&item.get(field.getName())!=null){
+                            //SimpleDateFormat aDate=new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+                            // item.put(field.getName(), aDate.format(new Date((Long) item.get(field.getName()))));
+                        //}
+                        //update-end--Author:zyf -- Date:20220531 ----for：【issues/#3629】 DictAspect Jackson序列化报错-----
                     }
                     items.add(item);
                 }
@@ -178,6 +201,7 @@ public class DictAspect {
             }
 
         }
+        return result;
     }
 
     /**
@@ -198,7 +222,7 @@ public class DictAspect {
      */
     private Map<String, List<DictModel>> translateAllDict(Map<String, List<String>> dataListMap) {
         // 翻译后的字典文本，key=dictCode
-        Map<String, List<DictModel>> translText = new HashMap<>();
+        Map<String, List<DictModel>> translText = new HashMap<>(5);
         // 需要翻译的数据（有些可以从redis缓存中获取，就不走数据库查询）
         List<String> needTranslData = new ArrayList<>();
         //step.1 先通过redis中获取缓存字典数据
@@ -252,7 +276,7 @@ public class DictAspect {
                 String values = String.join(",", needTranslDataTable);
                 log.info("translateDictFromTableByKeys.dictCode:" + dictCode);
                 log.info("translateDictFromTableByKeys.values:" + values);
-                List<DictModel> texts = commonAPI.translateDictFromTableByKeys(table, text, code, values);
+                List<DictModel> texts = commonApi.translateDictFromTableByKeys(table, text, code, values);
                 log.info("translateDictFromTableByKeys.result:" + texts);
                 List<DictModel> list = translText.computeIfAbsent(dictCode, k -> new ArrayList<>());
                 list.addAll(texts);
@@ -261,7 +285,10 @@ public class DictAspect {
                 for (DictModel dict : texts) {
                     String redisKey = String.format("sys:cache:dictTable::SimpleKey [%s,%s]", dictCode, dict.getValue());
                     try {
-                        redisTemplate.opsForValue().set(redisKey, dict.getText());
+                        // update-begin-author:taoyan date:20211012 for: 字典表翻译注解缓存未更新 issues/3061
+                        // 保留5分钟
+                        redisTemplate.opsForValue().set(redisKey, dict.getText(), 300, TimeUnit.SECONDS);
+                        // update-end-author:taoyan date:20211012 for: 字典表翻译注解缓存未更新 issues/3061
                     } catch (Exception e) {
                         log.warn(e.getMessage(), e);
                     }
@@ -278,7 +305,7 @@ public class DictAspect {
             String values = String.join(",", needTranslData);
             log.info("translateManyDict.dictCodes:" + dictCodes);
             log.info("translateManyDict.values:" + values);
-            Map<String, List<DictModel>> manyDict = commonAPI.translateManyDict(dictCodes, values);
+            Map<String, List<DictModel>> manyDict = commonApi.translateManyDict(dictCodes, values);
             log.info("translateManyDict.result:" + manyDict);
             for (String dictCode : manyDict.keySet()) {
                 List<DictModel> list = translText.computeIfAbsent(dictCode, k -> new ArrayList<>());
@@ -356,7 +383,7 @@ public class DictAspect {
                         log.warn(e.getMessage());
                     }
                 }else {
-                    tmpValue= commonAPI.translateDictFromTable(table,text,code,k.trim());
+                    tmpValue= commonApi.translateDictFromTable(table,text,code,k.trim());
                 }
             }else {
                 String keyString = String.format("sys:cache:dict::%s:%s",code,k.trim());
@@ -367,7 +394,7 @@ public class DictAspect {
                        log.warn(e.getMessage());
                     }
                 }else {
-                    tmpValue = commonAPI.translateDict(code, k.trim());
+                    tmpValue = commonApi.translateDict(code, k.trim());
                 }
             }
             //update-end--Author:scott -- Date:20210531 ----for： !56 优化微服务应用下存在表字段需要字典翻译时加载缓慢问题-----
@@ -381,6 +408,22 @@ public class DictAspect {
 
         }
         return textValue.toString();
+    }
+
+    /**
+     * 检测返回结果集中是否包含Dict注解
+     * @param records
+     * @return
+     */
+    private Boolean checkHasDict(List<Object> records){
+        if(oConvertUtils.isNotEmpty(records) && records.size()>0){
+            for (Field field : oConvertUtils.getAllFields(records.get(0))) {
+                if (oConvertUtils.isNotEmpty(field.getAnnotation(Dict.class))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
 }

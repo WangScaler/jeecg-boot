@@ -146,7 +146,9 @@ public class SysBaseApiImpl implements ISysBaseAPI {
 				//通过自定义URL匹配规则 获取菜单（实现通过菜单配置数据权限规则，实际上针对获取数据接口进行数据规则控制）
 				String userMatchUrl = UrlMatchEnum.getMatchResultByUrl(requestPath);
 				LambdaQueryWrapper<SysPermission> queryQserMatch = new LambdaQueryWrapper<SysPermission>();
-				queryQserMatch.eq(SysPermission::getMenuType, 1);
+				// update-begin-author:taoyan date:20211027 for: online菜单如果配置成一级菜单 权限查询不到 取消menuType = 1
+				//queryQserMatch.eq(SysPermission::getMenuType, 1);
+				// update-end-author:taoyan date:20211027 for: online菜单如果配置成一级菜单 权限查询不到 取消menuType = 1
 				queryQserMatch.eq(SysPermission::getDelFlag, 0);
 				queryQserMatch.eq(SysPermission::getUrl, userMatchUrl);
 				if(oConvertUtils.isNotEmpty(userMatchUrl)){
@@ -566,7 +568,7 @@ public class SysBaseApiImpl implements ISysBaseAPI {
 	}
 
 	@Override
-	public List<SysCategoryModel> queryAllDSysCategory() {
+	public List<SysCategoryModel> queryAllSysCategory() {
 		List<SysCategory> ls = categoryMapper.selectList(null);
 		List<SysCategoryModel> res = oConvertUtils.entityListToModelList(ls,SysCategoryModel.class);
 		return res;
@@ -778,7 +780,7 @@ public class SysBaseApiImpl implements ISysBaseAPI {
 			for(SysUserDepart userDepart : userDepartList){
 				//查询所属公司编码
 				SysDepart depart = sysDepartService.getById(userDepart.getDepId());
-				int length = YouBianCodeUtil.zhanweiLength;
+				int length = YouBianCodeUtil.ZHANWEI_LENGTH;
 				String compyOrgCode = "";
 				if(depart != null && depart.getOrgCode() != null){
 					compyOrgCode = depart.getOrgCode().substring(0,length);
@@ -1054,7 +1056,7 @@ public class SysBaseApiImpl implements ISysBaseAPI {
 			 List<Map> list=new ArrayList();
 			 //4.处理部门和下级用户数据
 			for (SysDepart dept:departs) {
-				Map map=new HashMap();
+				Map map=new HashMap(5);
 				//部门名称
 				String departName = dept.getDepartName();
 				//根据部门编码获取下级部门id

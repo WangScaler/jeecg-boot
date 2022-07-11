@@ -1,3 +1,4 @@
+<#include "/common/utils.ftl">
 <#list subTables as subTab>
 #segment#${subTab.entityName}.java
 package ${bussiPackage}.${entityPackage}.entity;
@@ -34,7 +35,7 @@ public class ${subTab.entityName} implements Serializable {
 <#if po.fieldName == primaryKeyField>
 	@TableId(type = IdType.ASSIGN_ID)
 <#else>
-	<#if po.fieldDbType =='Date'>
+	<#if po.fieldDbType =='Date' || po.fieldDbType =='Datetime'>
 		<#if po.classType=='date'>
     <#if !excel_ignore_arr?seq_contains("${po.fieldName}")>
 	@Excel(name = "${po.filedComment}", width = 15, format = "yyyy-MM-dd")
@@ -65,7 +66,8 @@ public class ${subTab.entityName} implements Serializable {
     @Dict(dicCode = "id",dicText = "name",dictTable = "sys_category")
 </#if>
 <#if po.classType =='sel_depart'>
-    @Dict(dicCode = "id",dicText = "depart_name",dictTable = "sys_depart")
+    <#assign list_field_dictCode='dicCode = "${camelToDashed(po.extendParams.store?default(\"id\")?trim)}", dicText = "${camelToDashed(po.extendParams.text?default(\"depart_name\")?trim)}", dictTable = "sys_depart"'>
+    @Dict(${list_field_dictCode})
 </#if>
 	<#-- 大字段转换 -->
     <#include "/common/blob.ftl">

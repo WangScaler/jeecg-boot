@@ -23,6 +23,7 @@ import org.jeecg.modules.system.entity.SysDict;
 import org.jeecg.modules.system.entity.SysDictItem;
 import org.jeecg.modules.system.model.SysDictTree;
 import org.jeecg.modules.system.model.TreeSelectModel;
+import org.jeecg.modules.system.security.DictQueryBlackListHandler;
 import org.jeecg.modules.system.service.ISysDictItemService;
 import org.jeecg.modules.system.service.ISysDictService;
 import org.jeecg.modules.system.vo.SysDictPage;
@@ -64,6 +65,8 @@ public class SysDictController {
 	private ISysDictItemService sysDictItemService;
 	@Autowired
 	public RedisTemplate<String, Object> redisTemplate;
+	@Autowired
+	private DictQueryBlackListHandler dictQueryBlackListHandler;
 
 	@RequestMapping(value = "/list", method = RequestMethod.GET)
 	public Result<IPage<SysDict>> queryPageList(SysDict sysDict,@RequestParam(name="pageNo", defaultValue="1") Integer pageNo,
@@ -118,7 +121,7 @@ public class SysDictController {
 	 */
 	@RequestMapping(value = "/queryAllDictItems", method = RequestMethod.GET)
 	public Result<?> queryAllDictItems(HttpServletRequest request) {
-		Map<String, List<DictModel>> res = new HashMap<String, List<DictModel>>();
+		Map<String, List<DictModel>> res = new HashMap(5);
 		res = sysDictService.queryAllDictItems();
 		return Result.ok(res);
 	}
@@ -153,9 +156,14 @@ public class SysDictController {
 	 * @return
 	 */
 	@RequestMapping(value = "/getDictItems/{dictCode}", method = RequestMethod.GET)
-	public Result<List<DictModel>> getDictItems(@PathVariable String dictCode, @RequestParam(value = "sign",required = false) String sign,HttpServletRequest request) {
+	public Result<List<DictModel>> getDictItems(@PathVariable("dictCode") String dictCode, @RequestParam(value = "sign",required = false) String sign,HttpServletRequest request) {
 		log.info(" dictCode : "+ dictCode);
 		Result<List<DictModel>> result = new Result<List<DictModel>>();
+		//update-begin-author:taoyan date:20220317 for: VUEN-222【安全机制】字典接口、online报表、online图表等接口，加一些安全机制
+		if(!dictQueryBlackListHandler.isPass(dictCode)){
+			return result.error500(dictQueryBlackListHandler.getError());
+		}
+		//update-end-author:taoyan date:20220317 for: VUEN-222【安全机制】字典接口、online报表、online图表等接口，加一些安全机制
 		try {
 			List<DictModel> ls = sysDictService.getDictItems(dictCode);
 			if (ls == null) {
@@ -181,12 +189,17 @@ public class SysDictController {
 	 * @return
 	 */
 	@RequestMapping(value = "/loadDict/{dictCode}", method = RequestMethod.GET)
-	public Result<List<DictModel>> loadDict(@PathVariable String dictCode,
-			@RequestParam(name="keyword") String keyword,
+	public Result<List<DictModel>> loadDict(@PathVariable("dictCode") String dictCode,
+			@RequestParam(name="keyword",required = false) String keyword,
 			@RequestParam(value = "sign",required = false) String sign,
 			@RequestParam(value = "pageSize", required = false) Integer pageSize) {
 		log.info(" 加载字典表数据,加载关键字: "+ keyword);
 		Result<List<DictModel>> result = new Result<List<DictModel>>();
+		//update-begin-author:taoyan date:20220317 for: VUEN-222【安全机制】字典接口、online报表、online图表等接口，加一些安全机制
+		if(!dictQueryBlackListHandler.isPass(dictCode)){
+			return result.error500(dictQueryBlackListHandler.getError());
+		}
+		//update-end-author:taoyan date:20220317 for: VUEN-222【安全机制】字典接口、online报表、online图表等接口，加一些安全机制
 		try {
 			List<DictModel> ls = sysDictService.loadDict(dictCode, keyword, pageSize);
 			if (ls == null) {
@@ -215,7 +228,7 @@ public class SysDictController {
 	 */
 	@RequestMapping(value = "/loadDictOrderByValue/{dictCode}", method = RequestMethod.GET)
 	public Result<List<DictModel>> loadDictOrderByValue(
-			@PathVariable String dictCode,
+			@PathVariable("dictCode") String dictCode,
 			@RequestParam(name = "keyword") String keyword,
 			@RequestParam(value = "sign", required = false) String sign,
 			@RequestParam(value = "pageSize", required = false) Integer pageSize) {
@@ -256,8 +269,13 @@ public class SysDictController {
 	 * @return
 	 */
 	@RequestMapping(value = "/loadDictItem/{dictCode}", method = RequestMethod.GET)
-	public Result<List<String>> loadDictItem(@PathVariable String dictCode,@RequestParam(name="key") String keys, @RequestParam(value = "sign",required = false) String sign,@RequestParam(value = "delNotExist",required = false,defaultValue = "true") boolean delNotExist,HttpServletRequest request) {
+	public Result<List<String>> loadDictItem(@PathVariable("dictCode") String dictCode,@RequestParam(name="key") String keys, @RequestParam(value = "sign",required = false) String sign,@RequestParam(value = "delNotExist",required = false,defaultValue = "true") boolean delNotExist,HttpServletRequest request) {
 		Result<List<String>> result = new Result<>();
+		//update-begin-author:taoyan date:20220317 for: VUEN-222【安全机制】字典接口、online报表、online图表等接口，加一些安全机制
+		if(!dictQueryBlackListHandler.isPass(dictCode)){
+			return result.error500(dictQueryBlackListHandler.getError());
+		}
+		//update-end-author:taoyan date:20220317 for: VUEN-222【安全机制】字典接口、online报表、online图表等接口，加一些安全机制
 		try {
 			if(dictCode.indexOf(",")!=-1) {
 				String[] params = dictCode.split(",");
@@ -359,7 +377,7 @@ public class SysDictController {
 	 * @return
 	 */
 	//@RequiresRoles({"admin"})
-	@RequestMapping(value = "/edit", method = RequestMethod.PUT)
+	@RequestMapping(value = "/edit", method = { RequestMethod.PUT,RequestMethod.POST })
 	public Result<SysDict> edit(@RequestBody SysDict sysDict) {
 		Result<SysDict> result = new Result<SysDict>();
 		SysDict sysdict = sysDictService.getById(sysDict.getId());
@@ -488,7 +506,8 @@ public class SysDictController {
  		MultipartHttpServletRequest multipartRequest = (MultipartHttpServletRequest) request;
 		Map<String, MultipartFile> fileMap = multipartRequest.getFileMap();
 		for (Map.Entry<String, MultipartFile> entity : fileMap.entrySet()) {
-			MultipartFile file = entity.getValue();// 获取上传文件对象
+            // 获取上传文件对象
+			MultipartFile file = entity.getValue();
 			ImportParams params = new ImportParams();
 			params.setTitleRows(2);
 			params.setHeadRows(2);
@@ -496,7 +515,7 @@ public class SysDictController {
 			try {
 				//导入Excel格式校验，看匹配的字段文本概率
 				Boolean t = ExcelImportCheckUtil.check(file.getInputStream(), SysDictPage.class, params);
-				if(!t){
+				if(t!=null && !t){
 					throw new RuntimeException("导入Excel校验失败 ！");
 				}
 				List<SysDictPage> list = ExcelImportUtil.importExcel(file.getInputStream(), SysDictPage.class, params);
@@ -511,11 +530,22 @@ public class SysDictController {
 						Integer integer = sysDictService.saveMain(po, list.get(i).getSysDictItemList());
 						if(integer>0){
 							successLines++;
-						}else{
+                        //update-begin---author:wangshuai ---date:20220211  for：[JTC-1168]如果字典项值为空，则字典项忽略导入------------
+						}else if(integer == -1){
+                            errorLines++;
+                            errorMessage.add("字典名称：" + po.getDictName() + "，对应字典列表的字典项值不能为空，忽略导入。");
+                        }else{
+                        //update-end---author:wangshuai ---date:20220211  for：[JTC-1168]如果字典项值为空，则字典项忽略导入------------
 							errorLines++;
 							int lineNumber = i + 1;
-							errorMessage.add("第 " + lineNumber + " 行：字典编码已经存在，忽略导入。");
-						}
+                            //update-begin---author:wangshuai ---date:20220209  for：[JTC-1168]字典编号不能为空------------
+                            if(oConvertUtils.isEmpty(po.getDictCode())){
+                                errorMessage.add("第 " + lineNumber + " 行：字典编码不能为空，忽略导入。");
+                            }else{
+                                errorMessage.add("第 " + lineNumber + " 行：字典编码已经存在，忽略导入。");
+                            }
+                            //update-end---author:wangshuai ---date:20220209  for：[JTC-1168]字典编号不能为空------------
+                        }
 					}  catch (Exception e) {
 						errorLines++;
 						int lineNumber = i + 1;
@@ -557,7 +587,7 @@ public class SysDictController {
 	 * @return
 	 */
 	@RequestMapping(value = "/deletePhysic/{id}", method = RequestMethod.DELETE)
-	public Result<?> deletePhysic(@PathVariable String id) {
+	public Result<?> deletePhysic(@PathVariable("id") String id) {
 		try {
 			sysDictService.deleteOneDictPhysically(id);
 			return Result.ok("删除成功!");
@@ -573,7 +603,7 @@ public class SysDictController {
 	 * @return
 	 */
 	@RequestMapping(value = "/back/{id}", method = RequestMethod.PUT)
-	public Result<?> back(@PathVariable String id) {
+	public Result<?> back(@PathVariable("id") String id) {
 		try {
 			sysDictService.updateDictDelFlag(0,id);
 			return Result.ok("操作成功!");
